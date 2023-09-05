@@ -19,19 +19,14 @@ def zernike_ft(fabs, phi, D, n_noll):
 def zernike_filter(fabs, fx, fy, D, n_noll, n_noll_start=1, gamma=None):
     phi = numpy.arctan2(fy,fx)
 
-    if gamma == None:
+    if gamma is None:
         out = numpy.zeros(fabs.shape, dtype=complex)
 
         for i in range(n_noll_start, n_noll+1):
             out += zernike_ft(fabs, phi, D, i)
         mid = int(fabs.shape[0]/2)
 
-        if n_noll_start == 1:
-            out[mid, mid] = 1
-        else:
-            out[mid,mid] = 0
-        return out
-
+        out[mid,mid] = 1 if n_noll_start == 1 else 0
     else:
         if numpy.array(gamma).ndim == 0:
             gamma = numpy.array([gamma])
@@ -41,18 +36,16 @@ def zernike_filter(fabs, fx, fy, D, n_noll, n_noll_start=1, gamma=None):
                 out[ix] += zernike_ft(fabs, phi, g*D, i)
 
         mid = int(fabs.shape[0]/2)
-        if n_noll_start == 1:
-            out[:,mid, mid] = 1
-        else:
-            out[:,mid,mid] = 0
-        return out
+        out[:,mid,mid] = 1 if n_noll_start == 1 else 0
+
+    return out
 
 def zernike_squared_filter(fabs, fx, fy, D, n_noll, n_noll_start=1, gamma=None, plusminus=False):
     phi = numpy.arctan2(fy,fx)
     if plusminus:
         phi1 = numpy.arctan2(-fy,-fx)
 
-    if gamma == None:
+    if gamma is None:
         out = numpy.zeros(fabs.shape, dtype=complex)
 
         for i in range(n_noll_start, n_noll+1):
@@ -64,12 +57,7 @@ def zernike_squared_filter(fabs, fx, fy, D, n_noll, n_noll_start=1, gamma=None, 
                 out += numpy.abs(z)**2
         mid = int(fabs.shape[-1]/2)
 
-        if n_noll_start == 1:
-            out[...,mid, mid] = 1
-        else:
-            out[...,mid,mid] = 0
-        return out
-
+        out[...,mid,mid] = 1 if n_noll_start == 1 else 0
     else:
         if numpy.array(gamma).ndim == 0:
             gamma = numpy.array([gamma])
@@ -83,11 +71,9 @@ def zernike_squared_filter(fabs, fx, fy, D, n_noll, n_noll_start=1, gamma=None, 
                 else:
                     out[ix] += numpy.abs(z)**2
         mid = int(fabs.shape[0]/2)
-        if n_noll_start == 1:
-            out[:,mid, mid] = 1
-        else:
-            out[:,mid,mid] = 0
-        return out
+        out[:,mid,mid] = 1 if n_noll_start == 1 else 0
+
+    return out
 
 def piston_gtilt_filter(fabs, fx, fy, D):
     pist = zernike_squared_filter(fabs, fx, fy, D, 1)
@@ -121,19 +107,17 @@ def mask_lf(freq, d_WFS, modal=False, modal_mult=1, Zmax=None, D=None, Gtilt=Fal
         fabs = numpy.sqrt(fx**2 + fy**2)
         if Zmax is None:
             dm_space = fabs <= fmax * modal_mult
+        elif Gtilt:
+            dm_space = piston_gtilt_filter(fabs, fx, fy, D)
         else:
-            if Gtilt:
-                dm_space = piston_gtilt_filter(fabs, fx, fy, D)
-            else:
-                dm_space = zernike_squared_filter(fabs, fx, fy, D, Zmax).real
+            dm_space = zernike_squared_filter(fabs, fx, fy, D, Zmax).real
     else:
         dm_space = wfs_space
 
     # Make sure there are no mask > 1
     dm_space = numpy.where(dm_space < 1, dm_space, 1)
 
-    mask = wfs_space * dm_space
-    return mask
+    return wfs_space * dm_space
 
 def mask_hf(freq, d_WFS, modal=False, modal_mult=1, Zmax=None, D=None, Gtilt=False):
     fx = freq.fx
@@ -174,17 +158,13 @@ def Jol_alias_openloop(freq, Dsubap, p, lf_mask, v=None, Delta_t=None, wvl=None,
         fy_tile = numpy.tile(fy, (len(p),*[1]*fy.ndim))
         alias = numpy.zeros((len(p), *fabs.shape))
 
-    if v is not None:
-        v_dot_kappa = (fx_tile.T * v[:,0] + fy_tile.T * v[:,1]).T
-    else:
-        v_dot_kappa = 0
-
+    v_dot_kappa = 0 if v is None else (fx_tile.T * v[:,0] + fy_tile.T * v[:,1]).T
     sinc_term = numpy.sinc(Delta_t * v_dot_kappa / (2*numpy.pi))**2
 
     #TODO: the central pixel may still be wrong
     with warnings.catch_warnings(): 
         warnings.filterwarnings("ignore", category=RuntimeWarning) # avoid annoying RuntimeWarnings
-        
+
         for l in ls:
             for k in ks:
                 if l == 0 and k == 0:
@@ -239,17 +219,13 @@ def G_AO_PAOLA(freq, mask, mode='AO', h=None, v=None,  dtheta=[0,0], Tx=None,
 
     delta_r_dot_kappa = (fx_tile.T * delta_r_theta[:,0] + fy_tile.T * delta_r_theta[:,1]).T
 
-    if v is not None:
-        v_dot_kappa = (fx_tile.T * v[:,0] + fy_tile.T * v[:,1]).T
-    else:
-        v_dot_kappa = 0
-
+    v_dot_kappa = 0 if v is None else (fx_tile.T * v[:,0] + fy_tile.T * v[:,1]).T
     term_1 = 2 * numpy.cos(delta_r_dot_kappa - tl * v_dot_kappa)
     term_2 = numpy.sinc(Delta_t * v_dot_kappa / (2*numpy.pi))
 
     aniso = 1 - term_1 * term_2 + term_2**2
 
-    if mode == 'AO' or mode == 'TT':
+    if mode in ['AO', 'TT']:
         return aniso * mask + (1-mask)
 
     if mode == 'LGSAO':
@@ -286,12 +262,10 @@ def logamp_powerspec(freq, h, cn2, wvl, pupilfilter=None, layer=True, L0=numpy.i
                     P[i] = pupilfilter(freq.fy_axis[i], freq.fx_axis[i])
             else:
                 P = pupilfilter(freq.fy_axis, freq.fx_axis)
-              
+
             powerspec *= P
 
-    powerspec_integrated = funcs.integrate_path(powerspec, h, layer=layer)
-
-    return powerspec_integrated
+    return funcs.integrate_path(powerspec, h, layer=layer)
 
 def DM_transfer_function(fx, fy, fabs, mode, Zmax=None, D=None, dsubap=None):
     if mode == 'perfect':
@@ -308,7 +282,7 @@ def G_AO_PAOLA_closedloop(fx, fy, fabs, h, dtheta=[0,0], Delta_t=0., tl=0., gloo
                         dsubap=None, DM='perfect', Zmax=None, D=None, nu=1, modal=False, modal_mult=1):
 
     Gamma_DM = DM_transfer_function(fx, fy, fabs, mode=DM, Zmax=Zmax, D=D, dsubap=dsubap)
-    
+
     # convert to linear spatial frequencies because I can't be bothered to convert
     # the long expressions below 
     fx = fx.copy()/(2*numpy.pi)
@@ -321,31 +295,25 @@ def G_AO_PAOLA_closedloop(fx, fy, fabs, h, dtheta=[0,0], Delta_t=0., tl=0., gloo
     delta_r_theta = (numpy.tile(dtheta, (len(h),1)).T / 206265. * h ).T
     delta_r_dot_f = (fx_tile.T * delta_r_theta[:,0] + fy_tile.T * delta_r_theta[:,1]).T
 
-    if v is not None:
-        v_dot_f = (fx_tile.T * v[:,0] + fy_tile.T * v[:,1]).T
-    else:
-        v_dot_f = 0
-
+    v_dot_f = (fx_tile.T * v[:,0] + fy_tile.T * v[:,1]).T if v is not None else 0
     # aniso-servo
     F_AS_top = (1 + gloop**2 * Gamma_DM**2 * numpy.sinc(Delta_t * v_dot_f)**2 * (1 + nu**2 * Gamma_DM**2)/2.
                 - numpy.cos(2*numpy.pi*Delta_t*v_dot_f) 
-                
+
                 + gloop * Gamma_DM**2 * numpy.sinc(Delta_t * v_dot_f) * nu *
                 (numpy.cos(2*numpy.pi * delta_r_dot_f + 2*numpy.pi * (Delta_t/2 - tl) * v_dot_f) - 
                 numpy.cos(2*numpy.pi * delta_r_dot_f - 2*numpy.pi * (Delta_t/2 + tl) * v_dot_f))
-                
+
                 + gloop * Gamma_DM * numpy.sinc(Delta_t * v_dot_f) * (numpy.cos(2*numpy.pi*(Delta_t/2 + tl) * v_dot_f) - 
                 numpy.cos(2*numpy.pi * (Delta_t/2. - tl) * v_dot_f)) 
-                
+
                 - gloop**2 * Gamma_DM**3 * numpy.sinc(Delta_t * v_dot_f)**2 * nu * numpy.cos(2 * numpy.pi * delta_r_dot_f))
 
     F_AS_bottom = (1 + gloop**2 * Gamma_DM**2 * numpy.sinc(Delta_t * v_dot_f)**2/2. 
-                    
+
                     + gloop * Gamma_DM * numpy.sinc(Delta_t * v_dot_f) * 
                     (numpy.cos(2*numpy.pi * (Delta_t/2. + tl) * v_dot_f) - numpy.cos(2*numpy.pi * (Delta_t/2. - tl) * v_dot_f))
-                    
+
                     - numpy.cos(2*numpy.pi * Delta_t * v_dot_f))
 
-    F_AS = F_AS_top/F_AS_bottom
-
-    return F_AS
+    return F_AS_top/F_AS_bottom

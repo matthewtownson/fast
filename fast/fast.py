@@ -85,7 +85,7 @@ class Fast():
         else:
             self.Niter_per_chunk = self.Niter // self.Nchunks
 
-        if not (self.Niter_per_chunk % 2 == 0):
+        if self.Niter_per_chunk % 2 != 0:
             raise Exception('NITER/NCHUNKS must be even number')
 
         self.init_logging()
@@ -198,11 +198,11 @@ class Fast():
         self.cn2 = self.params['CN2_TURB'] * self.zenith_correction
 
         # If L_SAT is defined, use that otherwise use H_SAT and zenith correct
-        if self.params['L_SAT'] != None:
-            self.L = self.params['L_SAT']
-        else:
+        if self.params['L_SAT'] is None:
             self.L = funcs.l_path(self.params['H_SAT'], self.params['ZENITH_ANGLE'])
 
+        else:
+            self.L = self.params['L_SAT']
         self.wind_speed = self.params['WIND_SPD']
         self.wind_dir = self.params['WIND_DIR']
         self.dtheta = self.params['DTHETA']
@@ -288,11 +288,7 @@ class Fast():
 
         if self.params['PROP_DIR'] == 'up':
             # Gaussian aperture at ground
-            if self.params['AXICON']:
-                ptype = 'axicon'
-            else:
-                ptype = 'gauss'
-
+            ptype = 'axicon' if self.params['AXICON'] else 'gauss'
             self.pupil = funcs.compute_pupil(self.Npxls, self.dx, self.D_ground, 
                 self.W0, self.obsc_ground, ptype=ptype)
 
@@ -319,7 +315,7 @@ class Fast():
             f_max = max(fx_max, fy_max)
             dx_req = numpy.pi / f_max
             N_req = int(2*numpy.ceil(2*numpy.pi/(self.freq.main.df * dx_req)/2)) # ensure even
-    
+
             pupil_temporal = funcs.compute_pupil(N_req, dx_req, self.D_ground,
                 self.W0, Tx_obsc=self.obsc_ground, ptype=ptype)
             self.freq.make_logamp_freqs(N=N_req, dx=dx_req)
@@ -329,7 +325,6 @@ class Fast():
         self.fibre_efield = 1.
         self.fibre_efield_sat = 1.
         if self.smf:
-            # compute optimal SMF parameters at Rx
             if self.params['PROP_DIR'] == "up":
                 self.fibre_efield_sat = funcs.optimize_fibre(self.pupil_sat, self.dx_sat)
             else:
@@ -346,10 +341,9 @@ class Fast():
             size //= 2
         s = (size, *self.powerspec.shape)
 
-        self.fftw_objs = {}
-        self.fftw_objs['IN'] = pyfftw.empty_aligned(s, dtype='complex128')
+        self.fftw_objs = {'IN': pyfftw.empty_aligned(s, dtype='complex128')}
         self.fftw_objs['OUT'] = pyfftw.empty_aligned(s, dtype='complex128')
-        
+
         # NOTE: numpy and fftw have opposite exponents!
         self.fftw_objs['FFT'] = pyfftw.FFTW(self.fftw_objs['IN'], self.fftw_objs['OUT'], 
                                             axes=((-1,-2)),
@@ -578,9 +572,7 @@ class Fast():
             pupil_t = self.pupil_sat
             pupil_r = self.pupil
 
-        self.link_budget = {}
-
-        self.link_budget['power'] = 10*numpy.log10(self.power/1e-3)
+        self.link_budget = {'power': 10 * numpy.log10(self.power/1e-3)}
 
         self.link_budget['free_space'] = 10*numpy.log10((self.wvl/(4*numpy.pi*self.L))**2)
 
@@ -629,8 +621,7 @@ class Fast():
 
     def calc_zenith_correction(self, zenith_angle):
         zenith_angle_rads = numpy.radians(zenith_angle)
-        gamma = 1/numpy.cos(zenith_angle_rads)
-        return gamma
+        return 1/numpy.cos(zenith_angle_rads)
 
     def make_header(self, params):
         logger.info("Making FITS header")
@@ -697,7 +688,7 @@ class SpatialFrequencies():
 
         fx_axes = []
         D = self.dx * self.N
-        for i,p in enumerate(range(1,pmax+1)):
+        for p in range(1,pmax+1):
             df_lo = 2*numpy.pi/(3**p * D)
             fx_lo = numpy.arange(-1,2) * df_lo
             fx_axes.append(fx_lo)

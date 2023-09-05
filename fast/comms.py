@@ -53,7 +53,7 @@ class Modulator():
 
     def modulate(self):
 
-        if self.modulation == None:
+        if self.modulation is None:
             self.recv_signal = self.power
             return self.recv_signal
 
@@ -65,25 +65,39 @@ class Modulator():
         # calculate average symbol energy Es (useful later)
         self.Es = (numpy.abs(self.constellation)**2).mean()
 
-        if self.EsN0 != None:
-            if self.modulation == "OOK":
-                self.awgn = numpy.random.normal(0, self.Es/self.snr, size=(self.symbols_per_iter, len(self.power)))
-            else:
-                self.awgn = numpy.random.normal(0, numpy.sqrt(self.Es/2)/self.snr, size=(self.symbols_per_iter,len(self.power))) \
-                    + 1j * numpy.random.normal(0, numpy.sqrt(self.Es/2)/self.snr, size=(self.symbols_per_iter, len(self.power)))
-        else:
+        if self.EsN0 is None:
             self.awgn = 0
 
+        else:
+            self.awgn = (
+                numpy.random.normal(
+                    0,
+                    self.Es / self.snr,
+                    size=(self.symbols_per_iter, len(self.power)),
+                )
+                if self.modulation == "OOK"
+                else numpy.random.normal(
+                    0,
+                    numpy.sqrt(self.Es / 2) / self.snr,
+                    size=(self.symbols_per_iter, len(self.power)),
+                )
+                + 1j
+                * numpy.random.normal(
+                    0,
+                    numpy.sqrt(self.Es / 2) / self.snr,
+                    size=(self.symbols_per_iter, len(self.power)),
+                )
+            )
         self.recv_signal = mod + self.awgn
-        
+
         return self.recv_signal
 
     def demodulate(self):
         
-        if self.modulation == None:
+        if self.modulation is None:
             self.recv_symbols = None
             return self.recv_symbols
-        
+
         # fast ways for OOK and BPSK
         if self.modulation == "OOK":
             cutoff = 0.5 
@@ -91,7 +105,7 @@ class Modulator():
 
         elif self.modulation == "BPSK":
             self.recv_symbols = (self.recv_signal.real < 0).astype(int)
-            
+
         else:
             d = numpy.array([abs(self.recv_signal - i) for i in self.constellation])
             self.recv_symbols = d.argmin(0)
@@ -103,12 +117,12 @@ class Modulator():
         Symbol error probability, from random bits
         '''
 
-        if self.modulation == None:
+        if self.modulation is None:
             self.sep = None
 
         else:
             self.sep = (self.recv_symbols != self.symbols).mean()
-            
+
         return self.sep
 
     def compute_evm(self):
@@ -116,14 +130,14 @@ class Modulator():
         Error Vector Magnitude (EVM), from random bits
         '''
 
-        if self.modulation == None:
+        if self.modulation is None:
             self.evm = None
-            
+
         else:
             tx_signal = self.constellation[self.symbols]
             ref = numpy.sqrt((tx_signal.real**2 + tx_signal.imag**2).mean()) # RMS of constellation points
             self.evm = (abs(tx_signal - self.recv_signal) / ref).mean()
-            
+
         return self.evm
 
     def run(self):
@@ -158,11 +172,7 @@ class FastFSOC(Fast):
 
 def fade_prob(I, threshold, min_fades=30):
     prob = (I<threshold).sum()/len(I)
-    if (I<threshold).sum() < min_fades:
-        # not enough fades
-        return numpy.nan
-    else:
-        return prob
+    return numpy.nan if (I<threshold).sum() < min_fades else prob
 
 
 def fade_dur(I, threshold, dt=1, min_fades=30):
@@ -345,10 +355,10 @@ def convolve_awgn_qam(samples, M, npxls, EsN0, N0=None, region_size="individual"
     decision_region_size_norm = decision_region_size * numpy.mean(numpy.abs(samples))
 
     # compute noise from desired SNR per symbol (EsN0) if required
-    if N0 == None:
+    if N0 is None:
         Es = numpy.mean(numpy.abs(constellation_norm)**2)
         N0 = Es / 10**(EsN0/10)
-    
+
     # for large variance, increase the size of decision_region_size for "full" 
     # type region to include +2sigma and avoid clipping the calculated PDF
     if region_size == "full":
@@ -360,13 +370,11 @@ def convolve_awgn_qam(samples, M, npxls, EsN0, N0=None, region_size="individual"
 
     dx = decision_region_size_norm / npxls
     x_g = numpy.linspace(-npxls/2, npxls/2, npxls+1) 
-    
+
     # compute variance in pixel units. if less than one, set equal to one to avoid 
     # numerical issues with normalisation
     sigma2 = N0 / (2 * dx**2)
-    if sigma2 < 1:
-        sigma2 = 1
-
+    sigma2 = max(sigma2, 1)
     g = numpy.exp(-x_g**2 / sigma2) / numpy.sqrt(numpy.pi * sigma2)
 
     out = numpy.zeros((len(constellation), npxls, npxls))
@@ -397,7 +405,7 @@ def convolve_awgn_qam(samples, M, npxls, EsN0, N0=None, region_size="individual"
                 h_conv += \
                     h[ix[i],iy[i]] * \
                     gaussian2d(h.shape, numpy.sqrt(sigma2*sigma_mults[i]/2), cent=(ix[i], iy[i])) / (numpy.pi * sigma2 * sigma_mults[i])
-                
+
         out[c] = h_conv
 
     return out
@@ -426,12 +434,11 @@ def define_constellation(modulation):
         nsymbols = 2
         constellation = numpy.array([0,1])
 
-    # coherent schemes
     elif modulation == "BPSK":
         # binary phase shift keying
         nsymbols = 2
         constellation = numpy.exp(1j * numpy.arange(nsymbols) * numpy.pi)
-    
+
     elif modulation in ["QPSK", "QAM"]:
         # quadrature PSK, quadrature amplitude modulation (same thing?)
         nsymbols = 4
@@ -446,7 +453,7 @@ def define_constellation(modulation):
         # M-QAM
         # first, check that nsymbols is a perfect square (not bothering with non-square)
         nsymbols = int(modulation[:-4])
-        if not (numpy.sqrt(nsymbols) == numpy.ceil(numpy.sqrt(nsymbols))):
+        if numpy.sqrt(nsymbols) != numpy.ceil(numpy.sqrt(nsymbols)):
             raise ValueError(f"{nsymbols}-QAM not possible as {nsymbols} is not a perfect square, only square M-QAM modulations supported")
 
         n_side = int(numpy.sqrt(nsymbols))
@@ -493,7 +500,7 @@ def _bit_at_index(code, index, bit):
     bit = str(bit)
     out = numpy.zeros(len(code), dtype=bool)
     for i,c in enumerate(code): 
-        out[i] = c[index] == str(bit)
+        out[i] = c[index] == bit
 
     return out
 

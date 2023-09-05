@@ -15,8 +15,11 @@ def HV57(h, w=21, A=1.7e-14):
     Returns:
         cn2 (numpy.ndarray): cn2 per layer
    '''
-    cn2 = 0.00594 * (w/27)**2 * (1e-5 * h)**10 * numpy.exp(-h/1000) + 2.7e-16 * numpy.exp(-h/1500) + A * numpy.exp(-h/100.)
-    return cn2
+    return (
+        0.00594 * (w / 27) ** 2 * (1e-5 * h) ** 10 * numpy.exp(-h / 1000)
+        + 2.7e-16 * numpy.exp(-h / 1500)
+        + A * numpy.exp(-h / 100.0)
+    )
 
 
 def Bufton_wind(h, vg=8, vt=30, ht=9400., Lt=4800.):
@@ -100,7 +103,4 @@ def equivalent_layers(h, p, L, w=None):
         if w is not None:
             w_el[i] = ((p[ix_tmp] * w[ix_tmp]**(5/3)).sum() / p[ix_tmp].sum())**(3/5)
 
-    if w is not None:
-        return h_el, cn2_el, w_el
-
-    return h_el, cn2_el
+    return (h_el, cn2_el, w_el) if w is not None else (h_el, cn2_el)

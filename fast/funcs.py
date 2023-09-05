@@ -78,11 +78,7 @@ def f_grid_log(L0, l0, N=129, include_0=True):
         fabs (numpy.ndarray): |f| = sqrt(fx**2 + fy**2)
         f (numpy.ndarray): 1d spatial frequencies array
     '''
-    if N%2 == 0:
-        N_one_side = int(N/2)
-    else:
-        N_one_side = int((N-1)/2)
-
+    N_one_side = int(N/2) if N%2 == 0 else int((N-1)/2)
     fmin = 0.5 * (2 * numpy.pi) / L0
     fmax = 2 * (2 * numpy.pi) / l0
 
@@ -126,11 +122,7 @@ def integrate_path(integrands, h, layer=True, axis=0):
     Returns
         integral (numpy.ndarray): Integral of input array over the 0 axis
     '''
-    if layer:
-        # Integration is just a sum in this case
-        return integrands.sum(axis)
-    else:
-        return simps(integrands, x=h, axis=axis)
+    return integrands.sum(axis) if layer else simps(integrands, x=h, axis=axis)
 
 def turb_powerspectrum_vonKarman(freq, cn2, L0=25, l0=0.01, C=2*numpy.pi):
     '''
@@ -193,8 +185,11 @@ def calc_gaussian_beam_parameters(z, F_0, W_0, wvl):
 
 def pdf_lognorm(Is, sigma, Imn=1):
     scint = sigma**2
-    pdf = 1/(Is * numpy.sqrt(scint * 2*numpy.pi)) * numpy.exp(-(numpy.log(Is/Imn) + 0.5 * scint)**2 / (2*scint))
-    return pdf
+    return (
+        1
+        / (Is * numpy.sqrt(scint * 2 * numpy.pi))
+        * numpy.exp(-((numpy.log(Is / Imn) + 0.5 * scint) ** 2) / (2 * scint))
+    )
 
 # def pdf_gammagamma(Is, alpha, beta):
 #     pI_1 = 2 * mpmath.power(alpha * beta, 0.5 * (alpha + beta))
@@ -310,12 +305,12 @@ def compute_pupil(N, dx, Tx, W0=None, Tx_obsc=0, Raxicon=None, ptype='gauss'):
         x = numpy.arange(-N/2, N/2, 1) * dx
         xx, yy = numpy.meshgrid(x,x)
         r = numpy.sqrt(xx**2 + yy**2)
-        if Raxicon == None:
+        if Raxicon is None:
             midpt = Tx_obsc/2 + (Tx/2-Tx_obsc/2)/2
         else:
             midpt = Raxicon
-        ring = numpy.exp(-(r - midpt)**2 / W0**2) 
-        P = (ring**2).sum() * dx**2 
+        ring = numpy.exp(-(r - midpt)**2 / W0**2)
+        P = (ring**2).sum() * dx**2
         return ring * circ_ap / numpy.sqrt(P)
 
     else:
@@ -343,13 +338,10 @@ def optimize_fibre(pupil, dx, size_min=None, size_max=None, return_size=False):
         return coupling_loss(W, N, pupil, dx)
 
     opt = minimize_scalar(_opt_func, bracket=[size_min, size_max]).x
-    
+
     g = gaussian2d(N, opt/dx/numpy.sqrt(2)) * numpy.sqrt(2./(numpy.pi * opt**2))
 
-    if return_size:
-        return g, opt
-    else:
-        return g
+    return (g, opt) if return_size else g
 
 def coupling_loss(W, N, pupil, dx):
     fibre_field = gaussian2d(N, W/dx/numpy.sqrt(2)) * numpy.sqrt(2./(numpy.pi*W**2))
@@ -408,7 +400,4 @@ def l_path(h_sat, zeta):
     c = r_earth ** 2 - (r_earth + h_sat) ** 2
     r1 = (-b + numpy.sqrt(b ** 2 - 4 * a * c)) / (2 * a)
     r2 = (-b - numpy.sqrt(b ** 2 - 4 * a * c)) / (2 * a)
-    if r1 >= 0:
-        return r1
-    else:
-        return r2
+    return r1 if r1 >= 0 else r2
